@@ -1,0 +1,38 @@
+name: Send AI News to Discord
+
+on:
+  push:
+    paths:
+      - 'news/**'
+
+jobs:
+  send-to-discord:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Get latest news file
+        id: get-file
+        run: |
+          FILE=$(ls -t news/*.md | head -1)
+          echo "file=$FILE" >> $GITHUB_OUTPUT
+      
+      - name: Send to Discord
+        run: |
+          CONTENT=$(cat "${{ steps.get-file.outputs.file }}")
+          # Discord 2000자 제한 처리
+          if [ ${#CONTENT} -gt 2000 ]; then
+            # 여러 메시지로 분할
+            echo "$CONTENT" | fold -w 1990 -s | while IFS= read -r chunk; do
+              curl -H "Content-Type: application/json" \
+                -X POST \
+                -d "$(jq -n --arg content \"$chunk\" '{content: $content}')" \
+                "${{ secrets.DISCORD_WEBHOOK_URL }}"
+              sleep 1
+            done
+          else
+            curl -H "Content-Type: application/json" \
+              -X POST \
+              -d "$(jq -n --arg content \"$CONTENT\" '{content: $content}')" \
+              "${{ secrets.DISCORD_WEBHOOK_URL }}"
+          fi
